@@ -20,22 +20,30 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
-        cache: gradle
 
-    - name: Make Gradle executable
-      run: chmod +x android/gradlew
+    - name: Set up Gradle
+      uses: gradle/gradle-build-action@v2
+      with:
+        gradle-version: 8.2
 
     - name: Build debug APK
       run: |
         cd android
-        ./gradlew assembleDebug
+        gradle assembleDebug -v
 
     - name: Build release APK
       run: |
         cd android
-        ./gradlew assembleRelease
+        gradle assembleRelease -v
+
+    - name: Check APK outputs
+      run: |
+        find android -name "*.apk" -type f
+        ls -lh android/app/build/outputs/apk/debug/*.apk || echo "Debug APK not found"
+        ls -lh android/app/build/outputs/apk/release/*.apk || echo "Release APK not found"
 
     - name: Upload debug APK to artifacts
+      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: B22-OS-debug
@@ -43,46 +51,33 @@ jobs:
         retention-days: 30
 
     - name: Upload release APK to artifacts
+      if: success()
       uses: actions/upload-artifact@v4
       with:
         name: B22-OS-release
         path: android/app/build/outputs/apk/release/app-release.apk
         retention-days: 30
 
-    - name: Create Release
-      if: startsWith(github.ref, 'refs/tags/')
+    - name: Create GitHub Release
+      if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
       uses: softprops/action-gh-release@v1
       with:
         files: |
           android/app/build/outputs/apk/debug/app-debug.apk
           android/app/build/outputs/apk/release/app-release.apk
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Upload to Release (every push to main)
-      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-      uses: ncipollo/release-action@v1
-      with:
-        artifacts: |
-          android/app/build/outputs/apk/debug/app-debug.apk
-          android/app/build/outputs/apk/release/app-release.apk
-        tag: latest
-        allowUpdates: true
-        replacesArtifacts: true
+        tag_name: build-${{ github.run_number }}
+        release_name: B22-OS Build #${{ github.run_number }}
         body: |
-          # B22-OS - Latest Build
-
-          Latest APK builds from the main branch.
-
-          ## Installation
-          1. Download the APK file from below
-          2. Transfer to your Android 15+ phone
-          3. Open Files app and tap the APK
-          4. Tap Install
-          5. Enjoy B22-OS!
-
-          ## Files
-          - **app-debug.apk** - Debug version (for testing)
-          - **app-release.apk** - Release version (optimized)
+          # B22-OS - Automated Build
+          
+          **Build Number:** #${{ github.run_number }}
+          **Commit:** ${{ github.sha }}
+          
+          Download the APK and install on your Android 15+ device!
+          
+          - **app-debug.apk** - Debug version
+          - **app-release.apk** - Release version (recommended)
+        draft: false
+        prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
