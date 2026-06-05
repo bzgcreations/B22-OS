@@ -7,6 +7,9 @@ on:
     branches: [ main, develop ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -20,43 +23,48 @@ jobs:
       with:
         java-version: '17'
         distribution: 'temurin'
+        cache: gradle
 
     - name: Set up Gradle
       uses: gradle/gradle-build-action@v2
       with:
         gradle-version: 8.2
 
+    - name: Make gradlew executable
+      run: chmod +x android/gradlew
+
     - name: Build debug APK
       run: |
         cd android
-        gradle assembleDebug -v
+        ./gradlew clean assembleDebug --stacktrace
 
     - name: Build release APK
       run: |
         cd android
-        gradle assembleRelease -v
+        ./gradlew assembleRelease --stacktrace
 
-    - name: Check APK outputs
+    - name: List APK outputs
+      if: always()
       run: |
-        find android -name "*.apk" -type f
-        ls -lh android/app/build/outputs/apk/debug/*.apk || echo "Debug APK not found"
-        ls -lh android/app/build/outputs/apk/release/*.apk || echo "Release APK not found"
+        echo "=== Debug APK ==="
+        ls -lh android/app/build/outputs/apk/debug/*.apk || echo "Not found"
+        echo ""
+        echo "=== Release APK ==="
+        ls -lh android/app/build/outputs/apk/release/*.apk || echo "Not found"
 
-    - name: Upload debug APK to artifacts
+    - name: Upload debug APK
       if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: B22-OS-debug
+        name: B22-OS-debug-apk
         path: android/app/build/outputs/apk/debug/app-debug.apk
-        retention-days: 30
 
-    - name: Upload release APK to artifacts
+    - name: Upload release APK
       if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: B22-OS-release
+        name: B22-OS-release-apk
         path: android/app/build/outputs/apk/release/app-release.apk
-        retention-days: 30
 
     - name: Create GitHub Release
       if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -66,14 +74,11 @@ jobs:
           android/app/build/outputs/apk/debug/app-debug.apk
           android/app/build/outputs/apk/release/app-release.apk
         tag_name: build-${{ github.run_number }}
-        release_name: B22-OS Build #${{ github.run_number }}
+        name: B22-OS Build #${{ github.run_number }}
         body: |
-          # B22-OS - Automated Build
+          # B22-OS Build #${{ github.run_number }}
           
-          **Build Number:** #${{ github.run_number }}
-          **Commit:** ${{ github.sha }}
-          
-          Download the APK and install on your Android 15+ device!
+          Download and install on your Android 15+ device!
           
           - **app-debug.apk** - Debug version
           - **app-release.apk** - Release version (recommended)
